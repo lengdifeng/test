@@ -3,6 +3,7 @@ script: make
 before_install:
 - openssl aes-256-cbc -K $encrypted_a2ccd447d104_key -iv $encrypted_a2ccd447d104_iv
   -in id_rsa.enc -out ~/.ssh/id_rsa -d
+- chmod 600 ~/.ssh/id_rsa
 
 after_success:
 - scp -o StrictHostKeyChecking=no  ./hello root@zhouxin.ltd:/root/pkg
