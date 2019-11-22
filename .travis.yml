@@ -5,4 +5,4 @@ before_install:
   -in id_rsa.enc -out ~/.ssh/id_rsa -d
 
 after_success:
-- scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa  ./LICENSE ./hello root@zhouxin.ltd:/root/pkg
+- scp -o StrictHostKeyChecking=no  ./hello root@zhouxin.ltd:/root/pkg
