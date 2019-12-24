@@ -1,0 +1,51 @@
+Notice in the callback function two calls to my_mangling_fun() is commented out. This is where i mangle the incoming and outgoing packet. I think this code would be sufficient to describe my case. If further clarification is need please ask, i will post further details.
+
+Lets say accompanying iptables rules are following :
+
+$iptables -t mangle -A PREROUTING -p udp --dport 5000 -j NFQUEUE
+$iptables -t mangle -A OUTPUT -p udp --sport 5000 -j NFQUEUE
+
+lets compile and fire udp the thing.
+
+$gcc -g3 nfq_test.c -lnfnetlink -lnetfilter_queue
+$./a.out (should be as root)
+
+now we can feed garbage udp payload to this thing by netcat both client and server mode
+
+$nc -ul 5000
+$nc -uvv <IP> 5000
+
+This will print the packet from my netfilter_queue app in stdout. Now that the development environment is set up, we can move to the next thing.
+
+What we are trying to achieve is following :
+
+Our server is listening on 5000 port. Now all incoming packet destined to udp port 5000 will be queued by kernel. And the handle to this queue will be given to user application we listed earlier. This queue mechanism works like this: When a packet is available, the callback function(cb() in our code) is called. after processing, the callback function calls nfq_set_verdict(). after a verdict is returned, next packet will pop from the queue. notice that a packet will not pop from queue if its preceding packet has not been issued a verdict. This verdict values are NF_ACCEPT for accepting packet, NF_DROP for dropping the packet.
+
+Now what if i want to concatenate the udp payloads of the incoming and outgoing packet without touching client and server side code?
+
+If i want to concatenate udp payloads from our app this very app, then we need to have multiple packets at hand. But we have seen that a packet does not pops from queue before a verdict is issued to its preceding one.
+
+So how can this be done?
+
+One possible solution is issue a NF_DROP to every packet and save those packets in an intermediate data structure. Let's say we have done it. But how can this packet can be delivered to the service listening on 5000 port?
+
+We can't use network stack for delivering the packet, because if we do, then packets will end up in NFQUEUE again.
+
+Another problem is, the server is totally agnostic about this app. That means it should not see any difference in the packets. It should see packets as if it came from the original client.
+
+I have heard that a application can send data to a server in the same host without using network layer(ip,port) by writing some files. I do not know the validity of this statement. But if anyone knows anything about it , it will be wonderful.
+
+I may get down voted for too much verbosity. But I think this can be fun session. we can find the solution together :)
+解决方案
+
+I propose the following solution:
+
+    store packets in the application and return verdict NF_DROP
+        re-inject packets into the network stack using RAW sockets
+            tag concatenated UDP packets with a DSCP (see IP packet format)
+                in iptables, add a rule to match on this DSCP (--dscp) and ACCEPT the packet directly, without it passing through your netfilter application
+
+                If your provider already tags some packets with DSCP, you can add some iptables rules to clear them, like:
+
+                iptables -t mangle -A INPUT -j DSCP --set-dscp 0
+
